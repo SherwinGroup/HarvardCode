@@ -52,6 +52,8 @@ class Win(QtGui.QMainWindow):
         self.voltage = 0.0
         self.numVoltageSteps = 0
 
+        self.keithCompliance = 10e-3
+
         self.settings = {}
         self.settings['collectScope'] = True
         self.settings['pauseScope'] = False
@@ -251,6 +253,8 @@ class Win(QtGui.QMainWindow):
     def openOsc(self, GPIB = None):
         if GPIB is None:
             GPIB = str(self.ui.cOscGPIB.currentText())
+        elif isinstance(GPIB, int):
+            GPIB = str(self.ui.cOscGPIB.itemText(GPIB))
         try:
             self.scope.close()
         except:
@@ -275,6 +279,8 @@ class Win(QtGui.QMainWindow):
     def openKeith(self, GPIB = None):
         if GPIB is None:
             GPIB = str(self.ui.cKeithGPIB.currentText())
+        elif isinstance(GPIB, int):
+            GPIB = str(self.ui.cKeithGPIB.itemText(GPIB))
         try:
             self.keith.close()
         except:
@@ -294,7 +300,8 @@ class Win(QtGui.QMainWindow):
             self.keith = Keithley2400Instr("Fake")
             self.ui.cKeithGPIB.setCurrentIndex(self.ui.cKeithGPIB.count()-1)
 
-        self.ui.cOscGPIB.currentIndexChanged.connect(self.openKeith)
+        self.keith.setCompliance(self.keithCompliance)
+        self.ui.cKeithGPIB.currentIndexChanged.connect(self.openKeith)
         
     def getScope(self):
         self.scope.getScopeValues()
@@ -355,6 +362,7 @@ class Win(QtGui.QMainWindow):
         #Start the thread to take the data
         self.numVoltageSteps = 0
         self.runFlag = True
+        self.resetLeak()
         self.scanningThread = threading.Thread(target=self.runScan, args = (start, step, end))
         self.scanningThread.start()
         
@@ -370,10 +378,11 @@ class Win(QtGui.QMainWindow):
         self.ui.tSave.setEnabled(True)
         self.ui.tMeasureEvery.setEnabled(True)
         self.runFlag = False
-        self.scope.breakLoop = True
+        self.keith.breakLoop = True
         try:
             self.statusSig.emit('Aborting...')
-            self.scanningThread.join()
+            if self.scanningThread.isAlive():
+                self.scanningThread.join()
         except Exception as e:
             print "error in abortion,", e
             
@@ -474,7 +483,7 @@ class Win(QtGui.QMainWindow):
 
         baseName = str(self.ui.tSave.text())
         baseName += "signalWaveform"
-        saveName = baseName + str(v)
+        saveName = baseName + str(v) + '.txt'
 
         np.savetxt(self.saveLoc+saveName, self.signalDataAve,
                    header = 'Time(s), Voltage(V)')
